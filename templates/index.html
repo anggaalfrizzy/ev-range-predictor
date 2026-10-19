@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EV Range - Estimasi jarak tempuh mobil listrik</title>
+  <meta name="description" content="Perkirakan jarak tempuh mobil listrik dari kapasitas baterainya dengan model regresi linear.">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #fbfbfd;
+      --surface: #f5f5f7;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --hair: #d2d2d7;
+      --blue: #0071e3;
+      --dot: #8e8e93;
+      --danger: #d70015;
+      color-scheme: light;
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, "Helvetica Neue", Arial, sans-serif;
+      font-size: 17px;
+      line-height: 1.47;
+      letter-spacing: -0.012em;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--blue); }
+
+    /* Navigasi */
+    .site-nav {
+      height: 48px;
+      padding: 0;
+      background: var(--bg);
+      background: color-mix(in srgb, var(--bg) 78%, transparent);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid var(--hair);
+      border-bottom-color: color-mix(in srgb, var(--hair) 60%, transparent);
+    }
+    .site-nav .container { display: flex; align-items: center; justify-content: space-between; height: 100%; }
+    .site-nav .navbar-brand { margin: 0; padding: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
+    .nav-links a { margin-left: 28px; font-size: 12px; color: var(--text); opacity: .8; text-decoration: none; }
+    .nav-links a:hover { opacity: 1; }
+
+    /* Hero */
+    .hero { padding: 132px 0 56px; text-align: center; }
+    .hero h1 {
+      margin: 0 auto;
+      max-width: 14ch;
+      font-size: clamp(2.5rem, 7vw, 5rem);
+      font-weight: 700;
+      line-height: 1.04;
+      letter-spacing: -0.04em;
+    }
+    .hero p {
+      margin: 22px auto 0;
+      max-width: 38ch;
+      font-size: clamp(1.1rem, 2.2vw, 1.5rem);
+      line-height: 1.35;
+      letter-spacing: -0.015em;
+      color: var(--muted);
+    }
+
+    /* Panel prediksi */
+    .panel { background: var(--surface); border-radius: 28px; padding: clamp(24px, 5vw, 56px); }
+    .result-label { margin: 0 0 6px; font-size: 15px; color: var(--muted); }
+    .result-figure { display: flex; align-items: baseline; gap: 10px; }
+    .result-number {
+      font-size: clamp(4.5rem, 11vw, 7.5rem);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.05em;
+      font-variant-numeric: tabular-nums;
+    }
+    .result-number.empty { color: var(--hair); }
+    .result-figure, .result-note { transition: opacity .2s ease; }
+    .result-figure.stale, .result-note.stale { opacity: .35; }
+    #chart.no-pin .guide, #chart.no-pin .pin { display: none; }
+    .result-unit { font-size: clamp(1.5rem, 3vw, 2.25rem); font-weight: 600; letter-spacing: -0.02em; color: var(--muted); }
+    .result-note { margin: 16px 0 0; max-width: 36ch; font-size: 15px; line-height: 1.45; color: var(--muted); }
+
+    .field-head { display: flex; align-items: center; justify-content: space-between; margin: 40px 0 18px; }
+    .field-head label { font-weight: 600; }
+    .unit-input { position: relative; width: 132px; }
+    .unit-input .ev-input {
+      height: 44px;
+      padding: 0 46px 0 12px;
+      border: 1px solid var(--hair);
+      border-radius: 12px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 17px;
+      font-weight: 500;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      box-shadow: none;
+    }
+    .unit-input .ev-input:focus {
+      border-color: var(--blue);
+      background: var(--bg);
+      color: var(--text);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 25%, transparent);
+    }
+    .unit-input span { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 15px; color: var(--muted); pointer-events: none; }
+
+    input[type=range] {
+      --pct: 50%;
+      -webkit-appearance: none;
+      appearance: none;
+      display: block;
+      width: 100%;
+      height: 28px;
+      margin: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      height: 4px; border-radius: 2px;
+      background: linear-gradient(to right, var(--blue) var(--pct), var(--hair) var(--pct));
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 28px; height: 28px; margin-top: -12px; border-radius: 50%;
+      background: #fff; border: 0;
+      box-shadow: 0 1px 4px rgba(0,0,0,.32), 0 0 0 .5px rgba(0,0,0,.1);
+    }
+    input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--hair); }
+    input[type=range]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--blue); }
+    input[type=range]::-moz-range-thumb {
+      width: 28px; height: 28px; border: 0; border-radius: 50%; background: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,.32), 0 0 0 .5px rgba(0,0,0,.1);
+    }
+    input[type=range]:focus-visible { outline: none; }
+    input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 40%, transparent), 0 1px 4px rgba(0,0,0,.32); }
+    input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 40%, transparent), 0 1px 4px rgba(0,0,0,.32); }
+
+    .scale { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--muted); }
+    .field-error { margin: 12px 0 0; font-size: 14px; color: var(--danger); }
+    .field-error[hidden] { display: none; }
+
+    .btn-pill {
+      margin-top: 24px;
+      min-height: 44px;
+      padding: 10px 22px;
+      border: 0;
+      border-radius: 980px;
+      background: var(--blue);
+      color: #fff;
+      font: inherit;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+    }
+    .btn-pill { transition: transform .12s ease, filter .12s ease, opacity .12s ease; }
+    .btn-pill:hover { filter: brightness(1.08); }
+    .btn-pill:active { transform: scale(.97); filter: brightness(.95); }
+    .btn-pill:disabled { opacity: .6; cursor: default; transform: none; }
+    .result-figure.pulse { animation: pulse .45s ease; }
+    @keyframes pulse { from { opacity: .35; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .btn-pill:focus-visible { outline: 3px solid color-mix(in srgb, var(--blue) 50%, transparent); outline-offset: 2px; }
+
+    /* Grafik */
+    #chart { display: block; width: 100%; height: auto; }
+    #chart .grid { stroke: var(--hair); stroke-width: 1; }
+    #chart text { fill: var(--muted); font-size: 11px; font-family: inherit; letter-spacing: 0; }
+    #chart .axis-title { font-size: 12px; }
+    #chart .dot { fill: var(--dot); fill-opacity: .42; }
+    #chart .fit { stroke: var(--blue); stroke-width: 2.5; stroke-linecap: round; }
+    #chart .guide { stroke: var(--blue); stroke-width: 1; stroke-dasharray: 3 4; opacity: .7; }
+    #chart .pin { fill: var(--blue); stroke: var(--surface); stroke-width: 3; }
+    .chart-caption { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+
+    /* Model */
+    .model { padding-top: 104px; padding-bottom: 56px; }
+    .model-inner { max-width: 760px; margin: 0 auto; }
+    .model h2 { margin: 0; font-size: clamp(2rem, 4.5vw, 3rem); font-weight: 700; line-height: 1.08; letter-spacing: -0.035em; }
+    .model .lead { margin: 18px 0 40px; max-width: 46ch; font-size: clamp(1.1rem, 2vw, 1.3rem); line-height: 1.4; color: var(--muted); }
+    .spec { margin: 0; padding: 0; }
+    .spec-row { display: flex; justify-content: space-between; gap: 24px; padding: 16px 0; border-top: 1px solid var(--hair); }
+    .spec-row:last-child { border-bottom: 1px solid var(--hair); }
+    .spec-row dt { font-weight: 400; color: var(--muted); }
+    .spec-row dd { margin: 0; font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+    .fine { margin: 24px 0 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
+
+    .site-footer { margin-top: 56px; padding: 24px 0 48px; border-top: 1px solid var(--hair); font-size: 12px; color: var(--muted); }
+
+    @media (max-width: 575.98px) {
+      .nav-links a { margin-left: 20px; }
+      .hero { padding-top: 104px; }
+      #chart text { font-size: 15px; }
+      #chart .axis-title { font-size: 16px; }
+      .spec-row { flex-direction: column; gap: 2px; }
+      .spec-row dd { text-align: left; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .result-figure.pulse, .btn-pill { animation: none; transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar fixed-top site-nav" aria-label="Navigasi utama">
+    <div class="container">
+      <a class="navbar-brand" href="#top">EV Range</a>
+      <div class="nav-links">
+        <a href="#prediksi">Prediksi</a>
+        <a href="#model">Model</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero" id="top">
+    <div class="container">
+      <h1>Perkirakan jarak tempuh mobil listrik.</h1>
+      <p>Pilih kapasitas baterai. Model regresi linear dari {{ info.n_data }} mobil listrik tahun 2025 menghitung estimasinya.</p>
+    </div>
+  </header>
+
+  <main>
+    <section id="prediksi" class="container">
+      <div class="panel">
+        <div class="row g-5 align-items-center">
+          <div class="col-lg-5">
+            <div aria-live="polite">
+              <p class="result-label" id="result-label">
+                {% if result %}Estimasi untuk <span id="label-kwh">{{ result.battery|idn(0) if result.battery == result.battery|round else result.battery|idn(1) }}</span> kWh{% else %}Estimasi jarak tempuh{% endif %}
+              </p>
+              <div class="result-figure">
+                <span class="result-number{% if not result %} empty{% endif %}" id="result-number">{{ result.range if result else "–" }}</span>
+                <span class="result-unit">km</span>
+              </div>
+              <p class="result-note" id="result-note">
+                {% if result %}Prediksi rata-rata meleset sekitar {{ info.rmse|idn(0) }} km, jadi kisarannya {{ result.low }} sampai {{ result.high }} km.{% elif error %}Isi kapasitas baterai yang valid untuk melihat estimasi.{% else %}Atur kapasitas baterai, lalu tekan Hitung estimasi.{% endif %}
+              </p>
+            </div>
+
+            <form id="form" method="post" action="/" novalidate>
+              <div class="field-head">
+                <label for="battery-number">Kapasitas baterai</label>
+                <div class="unit-input">
+                  <input id="battery-number" name="battery" type="text" inputmode="decimal" autocomplete="off"
+                         class="form-control ev-input" value="{{ battery_value }}" aria-describedby="battery-error">
+                  <span>kWh</span>
+                </div>
+              </div>
+              <input id="battery-range" type="range" min="{{ low }}" max="{{ high }}" step="1"
+                     value="{{ (result.battery if result else 75)|round|int }}" aria-label="Geser kapasitas baterai">
+              <div class="scale"><span>{{ low }} kWh</span><span>{{ high }} kWh</span></div>
+              <p id="battery-error" class="field-error" role="alert" {% if not error %}hidden{% endif %}>{{ error or "" }}</p>
+              <button type="submit" class="btn-pill">Hitung estimasi</button>
+            </form>
+          </div>
+
+          <div class="col-lg-7">
+            <svg id="chart" class="no-pin" viewBox="0 0 640 420" role="img"
+                 aria-label="Diagram sebaran {{ info.n_data }} mobil listrik: kapasitas baterai terhadap jarak tempuh, dengan garis regresi dan posisi estimasi."></svg>
+            <p class="chart-caption">Setiap titik abu-abu adalah satu model mobil. Garis biru adalah garis regresi. Setelah dihitung, titik biru menandai estimasi Anda.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="model" class="container model">
+      <div class="model-inner">
+        <h2>Tentang modelnya.</h2>
+        <p class="lead">Regresi linear mencari garis lurus terbaik yang menghubungkan kapasitas baterai dengan jarak tempuh. Setiap tambahan 1 kWh menambah jarak sekitar {{ info.coef|idn(2) }} km.</p>
+
+        <dl class="spec">
+          <div class="spec-row"><dt>Persamaan</dt><dd>jarak = {{ info.intercept|idn(2) }} + {{ info.coef|idn(2) }} × kWh</dd></div>
+          <div class="spec-row"><dt>Tambahan per 1 kWh</dt><dd>{{ info.coef|idn(2) }} km</dd></div>
+          <div class="spec-row"><dt>Intersep</dt><dd>{{ info.intercept|idn(2) }} km</dd></div>
+          <div class="spec-row"><dt>R²</dt><dd>{{ info.r2|idn(2) }}</dd></div>
+          <div class="spec-row"><dt>RMSE</dt><dd>{{ info.rmse|idn(1) }} km</dd></div>
+          <div class="spec-row"><dt>MAE</dt><dd>{{ info.mae|idn(1) }} km</dd></div>
+          <div class="spec-row"><dt>Jumlah data</dt><dd>{{ info.n_data }} model mobil</dd></div>
+          <div class="spec-row"><dt>Rentang input</dt><dd>{{ low }} sampai {{ high }} kWh</dd></div>
+        </dl>
+
+        <p class="fine">R² {{ info.r2|idn(2) }} berarti kapasitas baterai menjelaskan sekitar {{ (info.r2 * 100)|round|int }}% variasi jarak tempuh. Intersep tidak punya arti harfiah, karena tidak ada mobil dengan baterai 0 kWh. Hasil ini estimasi, bukan jaminan: efisiensi, bobot, bentuk bodi, dan cara berkendara ikut menentukan jarak tempuh nyata.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">Tugas Akhir 2, Pembelajaran Mesin. Dibangun dengan Flask, Scikit-learn, dan Bootstrap.</div>
+  </footer>
+
+  <script>
+  (() => {
+    const info = {{ js_info|tojson }};
+    const points = {{ points|tojson }};
+    const initial = {{ (result or {})|tojson }};
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const nf = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 });
+    const $ = (id) => document.getElementById(id);
+
+    const form = $("form"), num = $("battery-number"), rng = $("battery-range"), err = $("battery-error");
+    const outNum = $("result-number"), outNote = $("result-note"), outLabel = $("result-label");
+
+    /* ---------- Grafik ---------- */
+    const W = 640, H = 420, m = { l: 52, r: 16, t: 16, b: 44 };
+    const X0 = 20, X1 = 120, Y0 = 100, Y1 = 700;
+    const sx = (v) => m.l + (v - X0) / (X1 - X0) * (W - m.l - m.r);
+    const sy = (v) => H - m.b - (v - Y0) / (Y1 - Y0) * (H - m.t - m.b);
+
+    let svg = "";
+    for (let y = Y0; y <= Y1; y += 100) {
+      svg += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${sy(y)}" y2="${sy(y)}"/>`;
+      svg += `<text x="${m.l - 10}" y="${sy(y)}" text-anchor="end" dominant-baseline="middle">${y}</text>`;
+    }
+    for (let x = X0; x <= X1; x += 20) {
+      svg += `<text x="${sx(x)}" y="${H - m.b + 20}" text-anchor="middle">${x}</text>`;
+    }
+    svg += `<text class="axis-title" x="${(m.l + W - m.r) / 2}" y="${H - 6}" text-anchor="middle">Kapasitas baterai (kWh)</text>`;
+    svg += `<text class="axis-title" transform="translate(13 ${(m.t + H - m.b) / 2}) rotate(-90)" text-anchor="middle">Jarak tempuh (km)</text>`;
+    for (const [x, y] of points) svg += `<circle class="dot" cx="${sx(x).toFixed(1)}" cy="${sy(y).toFixed(1)}" r="3"/>`;
+    const fx0 = info.min_kwh, fx1 = info.max_kwh;
+    svg += `<line class="fit" x1="${sx(fx0)}" y1="${sy(info.intercept + info.coef * fx0)}" x2="${sx(fx1)}" y2="${sy(info.intercept + info.coef * fx1)}"/>`;
+    svg += `<line id="guide-v" class="guide"/><line id="guide-h" class="guide"/><circle id="pin" class="pin" r="9"/>`;
+    $("chart").innerHTML = svg;
+
+    function setPin(kwh, km) {
+      const px = sx(kwh), py = sy(km);
+      const gv = $("guide-v"), gh = $("guide-h"), pin = $("pin");
+      gv.setAttribute("x1", px); gv.setAttribute("x2", px); gv.setAttribute("y1", py); gv.setAttribute("y2", H - m.b);
+      gh.setAttribute("x1", m.l); gh.setAttribute("x2", px); gh.setAttribute("y1", py); gh.setAttribute("y2", py);
+      pin.setAttribute("cx", px); pin.setAttribute("cy", py);
+      $("chart").classList.remove("no-pin");
+    }
+
+    /* ---------- Angka animasi ---------- */
+    let shown = Number(outNum.textContent) || 0, raf = 0;
+    function showNumber(target) {
+      cancelAnimationFrame(raf);
+      if (reduceMotion) { shown = target; outNum.textContent = target; return; }
+      const from = shown, t0 = performance.now(), dur = 380;
+      const step = (t) => {
+        const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+        shown = Math.round(from + (target - from) * e);
+        outNum.textContent = shown;
+        if (p < 1) raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
+    }
+
+    /* ---------- Interaksi ---------- */
+    const setFill = () => rng.style.setProperty("--pct", ((rng.value - rng.min) / (rng.max - rng.min) * 100) + "%");
+    const parse = (s) => Number(String(s).trim().replace(",", "."));
+    const valid = (v) => Number.isFinite(v) && v >= info.low && v <= info.high;
+    const showError = (msg) => { err.textContent = msg; err.hidden = !msg; };
+
+    let seq = 0;
+    async function request(raw) {
+      const mine = ++seq;
+      try {
+        const res = await fetch("/api/predict?battery=" + encodeURIComponent(raw));
+        const data = await res.json();
+        if (mine !== seq) return;
+        if (!data.ok) { showError(data.error); return; }
+        showError("");
+        outNum.classList.remove("empty");
+        outNum.parentElement.classList.remove("stale"); outNote.classList.remove("stale");
+        showNumber(data.range);
+        outLabel.innerHTML = `Estimasi untuk <span>${nf.format(data.battery)}</span> kWh`;
+        outNote.textContent = `Prediksi rata-rata meleset sekitar ${Math.round(info.rmse)} km, jadi kisarannya ${data.low} sampai ${data.high} km.`;
+        setPin(data.battery, data.range);
+      } catch (e) {
+        if (mine === seq) showError("Tidak dapat terhubung ke server. Coba lagi.");
+      }
+    }
+
+    // Hasil lama diredupkan saat input berubah; hasil baru hanya muncul setelah tombol ditekan
+    const markStale = () => {
+      if (!outNum.classList.contains("empty")) { outNum.parentElement.classList.add("stale"); outNote.classList.add("stale"); }
+    };
+    rng.addEventListener("input", () => {
+      num.value = rng.value; setFill(); showError(""); markStale();
+    });
+    num.addEventListener("input", () => {
+      const v = parse(num.value);
+      showError(""); markStale();
+      if (valid(v)) { rng.value = Math.round(v); setFill(); }
+    });
+    form.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const v = parse(num.value);
+      if (!valid(v)) { showError(num.value.trim() === "" || !Number.isFinite(v) ? "Masukkan angka, misalnya 75 atau 62,5." : `Masukkan angka antara ${info.low} dan ${info.high} kWh.`); return; }
+      const btn = form.querySelector(".btn-pill");
+      btn.disabled = true; btn.textContent = "Menghitung...";
+      request(num.value).finally(() => {
+        setTimeout(() => { btn.disabled = false; btn.textContent = "Hitung estimasi"; }, 350);
+        const fig = outNum.parentElement;
+        fig.classList.remove("pulse"); void fig.offsetWidth; fig.classList.add("pulse");
+        const r = outNum.getBoundingClientRect();
+        if (r.top < 60 || r.bottom > innerHeight) outNum.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+      });
+    });
+
+    setFill();
+    if (initial.range) setPin(initial.battery, initial.range);
+  })();
+  </script>
+</body>
+</html>
